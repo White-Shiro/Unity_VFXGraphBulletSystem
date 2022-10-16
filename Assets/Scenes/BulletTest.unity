@@ -154,7 +154,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_RootOrder: 6
+  m_RootOrder: 5
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!73398921 &68766397
 VFXRenderer:
@@ -290,7 +290,7 @@ Camera:
     y: 0
     width: 1
     height: 1
-  near clip plane: 0.2
+  near clip plane: 0.1
   far clip plane: 500
   field of view: 90
   orthographic: 0
@@ -495,13 +495,43 @@ PrefabInstance:
       objectReference: {fileID: 668810699}
     - target: {fileID: 2070925441746177913, guid: a1a802ecaf6775746bb2a929fb554ad8,
         type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2070925441746177913, guid: a1a802ecaf6775746bb2a929fb554ad8,
+        type: 3}
       propertyPath: m_Lens.FieldOfView
       value: 90
       objectReference: {fileID: 0}
     - target: {fileID: 2070925441746177913, guid: a1a802ecaf6775746bb2a929fb554ad8,
         type: 3}
+      propertyPath: m_Lens.ModeOverride
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2070925441746177913, guid: a1a802ecaf6775746bb2a929fb554ad8,
+        type: 3}
+      propertyPath: m_Lens.NearClipPlane
+      value: 0.1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2070925441746177913, guid: a1a802ecaf6775746bb2a929fb554ad8,
+        type: 3}
       propertyPath: m_Lens.m_SensorSize.x
       value: 1.7777778
+      objectReference: {fileID: 0}
+    - target: {fileID: 2070925442191277752, guid: a1a802ecaf6775746bb2a929fb554ad8,
+        type: 3}
+      propertyPath: Damping.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2070925442191277752, guid: a1a802ecaf6775746bb2a929fb554ad8,
+        type: 3}
+      propertyPath: Damping.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2070925442191277752, guid: a1a802ecaf6775746bb2a929fb554ad8,
+        type: 3}
+      propertyPath: Damping.z
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 2070925442191277752, guid: a1a802ecaf6775746bb2a929fb554ad8,
         type: 3}
@@ -644,7 +674,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 233393899}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.282, y: -0.14, z: 0.282}
+  m_LocalPosition: {x: 0, y: -0.14, z: 0.282}
   m_LocalScale: {x: 0.02296986, y: 0.049975775, z: 0.28991738}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -6283,8 +6313,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -292, y: 211}
-  m_SizeDelta: {x: 328.9544, y: 89.631}
+  m_AnchoredPosition: {x: -292, y: 143.40857}
+  m_SizeDelta: {x: 328.9544, y: 224.8139}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &948652284
 GameObject:
@@ -6515,15 +6545,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   debugText: {fileID: 937589634}
+  _hitEffect: {fileID: 539922900}
+  hitScanVfx: {fileID: 68766398}
+  projectileVfx: {fileID: 1584571532}
+  aliveMap: {fileID: 0}
   _bulletMesh: {fileID: 4300000, guid: 5311afa115791b64cba3e297837eac07, type: 3}
   _bulletMat: {fileID: 2100000, guid: 81ab5a0ebad07144082857eb3bde4357, type: 2}
   _castingMode: 1
   _recieveShadow: 0
   offset: {x: 90, y: 0, z: 0}
-  _hitEffect: {fileID: 539922900}
-  hitScanVfx: {fileID: 68766398}
-  projectileVfx: {fileID: 1584571532}
-  aliveMap: {fileID: 0}
 --- !u!4 &1206691874
 Transform:
   m_ObjectHideFlags: 0
@@ -6538,7 +6568,7 @@ Transform:
   m_Children:
   - {fileID: 539922901}
   m_Father: {fileID: 0}
-  m_RootOrder: 5
+  m_RootOrder: 8
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1286912614
 GameObject:
@@ -6907,6 +6937,9 @@ VisualEffect:
       - m_Value: {fileID: 10300, guid: 0000000000000000f000000000000000, type: 0}
         m_Name: Texture
         m_Overridden: 1
+      - m_Value: {fileID: 0}
+        m_Name: aliveMap
+        m_Overridden: 1
     m_Bool:
       m_Array: []
 --- !u!4 &1584571533
@@ -6922,7 +6955,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_RootOrder: 7
+  m_RootOrder: 6
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1714489594
 GameObject:
@@ -7265,7 +7298,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_RootOrder: 8
+  m_RootOrder: 7
   m_LocalEulerAnglesHint: {x: 0, y: 1074.764, z: 0}
 --- !u!1 &2047894372
 GameObject:

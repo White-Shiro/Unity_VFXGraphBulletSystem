@@ -5,54 +5,37 @@ using UnityEngine.Rendering;
 using UnityEngine.UI;
 using UnityEngine.VFX;
 
-[Serializable]
-public class WxBullet {
-	public Vector3 pos;
-	public Quaternion rot;
-	public float lifeTime = 0f;
-	public Vector3 velocity;
-	public float mag;
+using UnityEditor;
 
-	public WxBullet(Vector3 pos_ = default, Quaternion rot_ = default, Vector3 velocity_ = default, float lifeTime_ = 0f) {
-		pos = pos_;
-		rot = rot_;
-		velocity = velocity_;
-		lifeTime = lifeTime_;
-		mag = velocity.magnitude;
-	}
-}
+
 
 public class WxBulletManager : MonoBehaviour {
 
 	static WxBulletManager _instance = null;
 
-	[SerializeField] static List<List<WxBullet>> _bulletList	= new();
-	[SerializeField] static List<List<Matrix4x4>>_batches		= new();
+
 
 	[SerializeField] Text debugText;
-
-	//Can Only Draw 1023 Meshes per Batch
-
-	[SerializeField] Mesh _bulletMesh;
-	[SerializeField] Material _bulletMat;
-	[SerializeField] ShadowCastingMode _castingMode = ShadowCastingMode.Off;
-	[SerializeField] bool _recieveShadow = false;
-	[SerializeField] Vector3 offset;
 
 	[SerializeField] ParticleSystem _hitEffect = null;
 	Transform _hitTrans;
 
+	//hitScanVFX
 	[SerializeField] VisualEffect hitScanVfx;
 	VFXEventAttribute hitScanAttrbute;
 
+	//ProjectileVFX
 	[SerializeField] VisualEffect projectileVfx;
 	VFXEventAttribute projectileAttrbute;
 	[SerializeField] Texture2D aliveMap;
-	Color aliveC	= new Color(1,0,0);
-	Color deadC		= new Color(0,0,0);
+	Color aliveC = new Color(1, 0, 0);
+	Color deadC = new Color(0, 0, 0);
 
-	int bulletCount = -1;
+	int bulletFiredCount = -1;
 	bool mapIsDirty = false;
+
+	List<WxBullet> _bulletList;
+
 
 	public static WxBulletManager instance {
 		get {
@@ -66,52 +49,250 @@ public class WxBulletManager : MonoBehaviour {
 	}
 
 	private void Awake() {
+
+		Application.targetFrameRate = 60;
+
 		if (!_instance) _instance = this;
 		else Destroy(gameObject);
 
-		_bulletList.Add(new());
-		_batches.Add(new());
+		_bulletLists_old.Add(new());
+		_batches_old.Add(new());
 
-		if(hitScanVfx) hitScanAttrbute			= hitScanVfx.CreateVFXEventAttribute();
-		if(projectileVfx) projectileAttrbute	= projectileVfx.CreateVFXEventAttribute();
+		if (hitScanVfx) hitScanAttrbute = hitScanVfx.CreateVFXEventAttribute();
+		if (projectileVfx) projectileAttrbute = projectileVfx.CreateVFXEventAttribute();
 		InitAliveMap(ref aliveMap);
+
+		_bulletList = new(512);
 
 		if (_hitEffect) _hitTrans = _hitEffect.transform;
 	}
 
 	private void InitAliveMap(ref Texture2D map) {
-		
-		var mapSize = 1024;
-		map = new Texture2D(mapSize, 1,TextureFormat.R8,false);
+
+		var mapSize = 30;
+		map = new Texture2D(mapSize, 1, TextureFormat.R8, false);
 
 		for (int i = 0; i < mapSize; ++i) {
-			map.SetPixel(i,1, new Color(0, 0, 0));
+			SetBulletAliveToMap(i,false);
 		}
 
 		map.Apply();
 	}
+	private void UpdateAliveMapTexture() {
+		if (!mapIsDirty) return;
 
-	private void ApplyAliveMap() {
-		if(!mapIsDirty) return;
+		//var startTime = Time.realtimeSinceStartup;
 
 		aliveMap.Apply();
 		projectileVfx.SetTexture(ShaderPropertyUtil.aliveMapAtt, aliveMap);
 		mapIsDirty = false;
+
+		//var endTime = Time.realtimeSinceStartup;
+		//WxLogger.Warning((endTime - startTime) * 1000f);
+
 	}
 
-	void SetBulletAliveMap(int id ,bool alive) {
-		aliveMap.SetPixel(id,1,alive? aliveC: deadC);
+	void SetBulletAliveToMap(int id, bool alive) {
+		aliveMap.SetPixel(id, 0, alive ? aliveC : deadC);
+		mapIsDirty = true;
 	}
 
 
 	void Update() {
-		if (_bulletList == null) return;
+		Update_bullets();
+	}
 
-		var count = _bulletList.Count;
+	void Update_bullets() {
+
+		if(_bulletList == null || _bulletList.Count <= 0) return;
+
+		foreach (var bullet in _bulletList ) {
+
+			var alive = bullet.Simulate();
+
+			if (!alive) {
+				SetBulletAliveToMap(bullet.id,alive);
+
+			}
+		}
+
+
+		//ReverseForLoop to Remove Bullets
+		for (int i = _bulletList.Count - 1; i >= 0 ; i--) {
+			if (!_bulletList[i].alive) {
+				_bulletList.RemoveAt(i);
+			}
+		}
+
+
+		//Predicate method
+		//_bulletList.RemoveAll(i => !i.alive);
+	}
+
+
+
+	private void LateUpdate() {
+		//UpdateAliveMapTexture();
+		DebugShowBulletCount(_bulletList.Count);
+	}
+
+	public static void EmitHitFX(in RaycastHit hit) {
+
+		if (_instance._hitEffect) {
+			_instance._hitTrans.position = hit.point;
+			_instance._hitTrans.forward = hit.normal;
+			_instance._hitEffect.Play(true);
+		}
+	}
+
+	public class WxBullet {
+
+		public int id;
+		public Vector3 position;
+		public Vector3 velocity;
+		public float lifeTime = 3;
+		public float age = 0;
+		public bool alive = true;
+
+		public WxBullet(int id, in CreateDesc desc) {
+			this.id = id;
+			position = desc.startPos;
+			velocity = desc.velocity;
+			lifeTime = desc.etaTime;
+		}
+
+		public bool Simulate() {
+			if(!alive) return false;
+
+			position += velocity * Time.deltaTime;
+			age += Time.deltaTime;
+
+			if(age > lifeTime) {
+				alive = false;
+			}
+
+			return alive;
+		}
+
+		public struct CreateDesc {
+			public Vector3 startPos;
+			public Vector3 targetPos;
+
+			public Vector3 velocity;
+
+			public float distance;
+			public float etaTime;
+
+			public CreateDesc(in RaycastHit target, in Vector3 startPos, float speed) {
+
+				this.startPos = startPos;
+				targetPos = target.point;
+
+				var direction = target.point - startPos;
+				distance = direction.magnitude;
+				velocity = direction.SafeDivide(distance) * speed; //Unit Vector * speed
+				etaTime = distance / speed;
+			}
+
+			public CreateDesc(in Vector3 direction, in Vector3 startPos, float speed) {
+
+				this.startPos = startPos;
+				targetPos = startPos + direction;
+
+				distance = direction.magnitude;
+				velocity = direction.normalized * speed;
+
+				etaTime = distance / speed;
+
+			}
+		}
+	}
+
+	public static void SpawnBullet(in RaycastHit target, in Vector3 shootPos, float speed) {
+		var bulletDESC = new WxBullet.CreateDesc(in target,in shootPos,speed);
+		_instance.CreateBullet(in bulletDESC);
+		_instance.DrawVFXProjectile(in bulletDESC);
+	}
+
+	private void CreateBullet(in WxBullet.CreateDesc bulletDESC) {
+		var id = bulletFiredCount % (aliveMap.width);
+		var bullet = new WxBullet(id,in bulletDESC);
+
+		_bulletList.Add(bullet);
+		SetBulletAliveToMap(id, true);
+	}
+
+	private void DrawVFXProjectile(in WxBullet.CreateDesc bulletDESC) {
+
+		var attribute	= projectileAttrbute;
+		var vfx			= projectileVfx;
+
+		++bulletFiredCount;
+
+		attribute.SetFloat(ShaderPropertyUtil.spawnCountAtt, 1f);
+		attribute.SetVector3(ShaderPropertyUtil.startPosAtt, bulletDESC.startPos);
+		attribute.SetVector3(ShaderPropertyUtil.velocityAtt, bulletDESC.velocity);
+		attribute.SetFloat(ShaderPropertyUtil.lifeTimeAtt, bulletDESC.etaTime);
+		vfx.SendEvent(ShaderPropertyUtil.emitEvent, attribute);
+	}
+
+	void DebugShowModNum(int id) {
+		if (debugText) {
+			debugText.text = $"Bullets Fired: {bulletFiredCount} lastIDset = {id}";
+		}
+	}
+
+	void DebugShowBulletCount(int aliveCount) {
+		if (debugText) {
+			debugText.text = $"Bullets Fired: {bulletFiredCount} AliveBullets\nClass: {aliveCount} & VFX:{projectileVfx.aliveParticleCount}";
+		}
+	}
+
+	public static void DrawBulletLine(in RaycastHit hit, in Vector3 startPos) {
+
+		_instance.hitScanAttrbute.SetFloat(ShaderPropertyUtil.spawnCountAtt,1f);
+	//VFXGraph cannot handle multiple spawnEvent per frame. Use Direct Link to byPass SpawnContext instead
+	//https://forum.unity.com/threads/new-feature-direct-link.1137253/
+
+		_instance.hitScanAttrbute.SetVector3(ShaderPropertyUtil.startPosAtt, startPos);
+		_instance.hitScanAttrbute.SetVector3(ShaderPropertyUtil.targetPosAtt, hit.point);
+		_instance.hitScanVfx.SendEvent(ShaderPropertyUtil.emitEvent, _instance.hitScanAttrbute);
+
+		EmitHitFX(in hit);
+	}
+
+	void OnDrawGizmos() {
+
+		if(!Application.isPlaying || _bulletList.Count <= 0 ) return;
+
+		foreach (var bullet in _bulletList) {
+			Gizmos.color = Color.red;
+			Gizmos.DrawWireSphere(bullet.position,0.1f);
+			Handles.Label(bullet.position + Vector3.up *0.1f,bullet.id.ToString());
+		}
+	}
+
+	#region MatrixDrawMeshInstance_approach 
+
+	[SerializeField] static List<List<WxBullet_old>> _bulletLists_old = new();
+	[SerializeField] static List<List<Matrix4x4>> _batches_old = new();
+
+	//Can Only Draw 1023 Meshes per Batch
+
+	[SerializeField] Mesh _bulletMesh;
+	[SerializeField] Material _bulletMat;
+	[SerializeField] ShadowCastingMode _castingMode = ShadowCastingMode.Off;
+	[SerializeField] bool _recieveShadow = false;
+	[SerializeField] Vector3 offset;
+
+	private void MatrixDrawMeshInstance() {
+		if (_bulletLists_old == null) return;
+
+		var count = _bulletLists_old.Count;
 		for (int i = 0; i < count; ++i) {
 
-			var _subBulletList = _bulletList[i];
-			var _subMat4List = _batches[i];
+			var _subBulletList = _bulletLists_old[i];
+			var _subMat4List = _batches_old[i];
 
 			var subListCount = _subBulletList.Count;
 			for (int j = 0; j < subListCount; ++j) {
@@ -140,8 +321,8 @@ public class WxBulletManager : MonoBehaviour {
 
 
 				if (bullet.lifeTime < 0) {
-					_bulletList[i].RemoveAt(j);
-					_batches[i].RemoveAt(j);
+					_bulletLists_old[i].RemoveAt(j);
+					_batches_old[i].RemoveAt(j);
 					j--;
 					subListCount--;
 				}
@@ -151,119 +332,59 @@ public class WxBulletManager : MonoBehaviour {
 		}
 
 		if (_bulletMesh && _bulletMat) {
-			for (int i = 0; i < _batches.Count; ++i) {
-				Graphics.DrawMeshInstanced(_bulletMesh, 0, _bulletMat, _batches[i], null, _castingMode, _recieveShadow);
+			for (int i = 0; i < _batches_old.Count; ++i) {
+				Graphics.DrawMeshInstanced(_bulletMesh, 0, _bulletMat, _batches_old[i], null, _castingMode, _recieveShadow);
 			}
 		}
-
-/*
-		if (debugText) {
-
-			int allInstanceCount = 0;
-
-			for (int i = 0; i < _bulletList.Count; i++) {
-				allInstanceCount += _bulletList[i].Count;
-			}
-
-
-			bool isCastShadow = _castingMode == ShadowCastingMode.On;
-			debugText.text = $"Alive Bullets: {allInstanceCount} \n CastShadow: {isCastShadow}";
-		}*/
 	}
 
-	private void LateUpdate() {
-		ApplyAliveMap();
+	[Serializable]
+	public class WxBullet_old {
+		public Vector3 pos;
+		public Quaternion rot;
+		public float lifeTime = 0f;
+		public Vector3 velocity;
+		public float mag;
+
+		public WxBullet_old(Vector3 pos_ = default, Quaternion rot_ = default, Vector3 velocity_ = default, float lifeTime_ = 0f) {
+			pos = pos_;
+			rot = rot_;
+			velocity = velocity_;
+			lifeTime = lifeTime_;
+			mag = velocity.magnitude;
+		}
 	}
-
-
-	public static void SpawnBullet(Vector3 pos, Quaternion rot, Vector3 vel, float lifeTime) {
+	public static void SpawnBullet_DrawMeshInstance(Vector3 pos, Quaternion rot, Vector3 vel, float lifeTime) {
 
 		var adjustedRot = rot * Quaternion.Euler(_instance.offset);
 		Matrix4x4 bulletMat4 = Matrix4x4.TRS(pos, adjustedRot, Vector3.one);
-		var bullet = new WxBullet(pos, adjustedRot, vel, lifeTime);
+		var bullet = new WxBullet_old(pos, adjustedRot, vel, lifeTime);
 
-		var listCount = _bulletList.Count;
+		var listCount = _bulletLists_old.Count;
 
 		for (int i = 0; i < listCount; ++i) {
 
 
-			if (_bulletList[i].Count >= 1023) {
-				if (i == _bulletList[i].Count) {
+			if (_bulletLists_old[i].Count >= 1023) {
+				if (i == _bulletLists_old[i].Count) {
 
 					Debug.Log("Add new List");
 
-					_bulletList.Add(new());
-					_batches.Add(new());
+					_bulletLists_old.Add(new());
+					_batches_old.Add(new());
 
-					_bulletList[i].Add(bullet);
-					_batches[i].Add(bulletMat4);
+					_bulletLists_old[i].Add(bullet);
+					_batches_old[i].Add(bulletMat4);
 					listCount++;
 				}
 			} else {
-				_bulletList[i].Add(bullet);
-				_batches[i].Add(bulletMat4);
+				_bulletLists_old[i].Add(bullet);
+				_batches_old[i].Add(bulletMat4);
 				break;
 			}
 
 			Debug.Log(listCount);
 		}
 	}
-
-	public static void EmitHitFX(in RaycastHit hit) {
-
-		if (_instance._hitEffect) {
-			_instance._hitTrans.position = hit.point;
-			_instance._hitTrans.forward = hit.normal;
-			_instance._hitEffect.Play(true);
-		}
-	}
-
-	public static void DrawVFXProjectile(in RaycastHit hit, in Vector3 startPos,float speed) {
-
-		var attribute	= _instance.projectileAttrbute;
-		var vfx			= _instance.projectileVfx;
-		var dir = hit.point - startPos;
-		var mag = dir.magnitude;
-		var vel = dir.SafeDivide(mag) * speed;
-		var etaTime = mag / speed;
-
-		++_instance.bulletCount;
-
-		if(!_instance.mapIsDirty) _instance.mapIsDirty = true;
-
-		var id =  _instance.bulletCount % 1024 - 1;
-		_instance.SetBulletAliveMap(id, true);
-
-		attribute.SetFloat(ShaderPropertyUtil.spawnCountAtt, 1f);
-		attribute.SetVector3(ShaderPropertyUtil.startPosAtt, startPos);
-		attribute.SetVector3(ShaderPropertyUtil.velocityAtt, vel);
-		attribute.SetFloat(ShaderPropertyUtil.lifeTimeAtt, etaTime);
-		vfx.SendEvent(ShaderPropertyUtil.emitEvent, _instance.projectileAttrbute);
-		_instance.ShowModNum(id);
-
-	}
-	void ShowModNum(int id) {
-		if (debugText) {
-			debugText.text = $"Bullets Count: {bulletCount} | lastIDset = {id}";
-		}
-	}
-
-
-
-
-	public static void DrawBulletLine(in RaycastHit hit, in Vector3 startPos) {
-
-		_instance.hitScanAttrbute.SetFloat(ShaderPropertyUtil.spawnCountAtt,1f);
-	//VFXGraph cannot handle multiple spawnEvent per frame. Use Direct Link to byPass SpawnContext instead
-	//https://forum.unity.com/threads/new-feature-direct-link.1137253/
-
-		_instance.hitScanAttrbute.SetVector3(ShaderPropertyUtil.startPosAtt, startPos);
-		_instance.hitScanAttrbute.SetVector3(ShaderPropertyUtil.targetPosAtt, hit.point);
-		_instance.hitScanVfx.SendEvent(ShaderPropertyUtil.emitEvent, _instance.hitScanAttrbute);
-
-		EmitHitFX(in hit);
-	}
-
-
-
+	#endregion
 }

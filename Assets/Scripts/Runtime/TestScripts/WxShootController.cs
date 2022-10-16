@@ -28,8 +28,8 @@ public class WxShootController : MonoBehaviour {
 
 	public enum ShootMethod {
 		Hitscan,
+		Projectile_Old,
 		Projectile,
-		ProjectileVFX,
 	}
 
 	public ShootMethod shootMethod = ShootMethod.Hitscan;
@@ -61,23 +61,23 @@ public class WxShootController : MonoBehaviour {
 		var isHitting = Physics.Raycast(ray,out RaycastHit hit, 100000f, _rayCastLayer.value);
 
 		switch (shootMethod) {
-			case ShootMethod.Projectile:  ShootProjectile(in hit,isHitting); break;
+			case ShootMethod.Projectile_Old:  ShootProjectile_DrawMeshInstance(in hit,isHitting); break;
 			case ShootMethod.Hitscan: ShootHitScan(in hit); break;
-			case ShootMethod.ProjectileVFX: ShootProtileVFX(in hit); break;
+			case ShootMethod.Projectile: ShootProjectile(in hit); break;
 		}
 
 
 		nextShootTime = Time.time + shootIntervel;
 	}
 
-	private void ShootProtileVFX(in RaycastHit hit) {
+	private void ShootProjectile(in RaycastHit hit) {
 
 		if (_multipleShoot) {
 			foreach (var item in _shootPoint) {
-				WxBulletManager.DrawVFXProjectile(in hit, item.position,_speed);
+				WxBulletManager.SpawnBullet(in hit, item.position,_speed);
 			}
 		} else {
-			WxBulletManager.DrawVFXProjectile(in hit, shootPt.position, _speed);
+			WxBulletManager.SpawnBullet(in hit, shootPt.position, _speed);
 		}
 
 		if (recoilShakeSrc) {
@@ -100,14 +100,14 @@ public class WxShootController : MonoBehaviour {
 		}
 	}
 
-	private void ShootProjectile(in RaycastHit hit, bool isHitting) {
+	private void ShootProjectile_DrawMeshInstance(in RaycastHit hit, bool isHitting) {
 		for (int i = 0; i < _shootPoint.Length; ++i) {
 			if (!_shootPoint[i]) continue;
 
 			Vector3 bulletVel = isHitting ? (hit.point - _shootPoint[i].position).normalized : _shootPoint[i].forward;
 			bulletVel *= _speed;
 
-			WxBulletManager.SpawnBullet(_shootPoint[i].position,
+			WxBulletManager.SpawnBullet_DrawMeshInstance(_shootPoint[i].position,
 										_camTrans.localRotation,
 										bulletVel,
 										_bulletlifeTime
