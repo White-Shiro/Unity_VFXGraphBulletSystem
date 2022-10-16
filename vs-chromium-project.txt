@@ -1,0 +1,6 @@
+[SearchableFiles.include]
+*
+
+[SearchableFiles.ignore]
+Library/*
+obj/*
