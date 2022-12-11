@@ -4,16 +4,14 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.UI;
 using UnityEngine.VFX;
-
 using UnityEditor;
+
 
 
 
 public class WxBulletManager : MonoBehaviour {
 
 	static WxBulletManager _instance = null;
-
-
 
 	[SerializeField] Text debugText;
 
@@ -35,6 +33,8 @@ public class WxBulletManager : MonoBehaviour {
 	bool mapIsDirty = false;
 
 	List<WxBullet> _bulletList;
+
+	[SerializeField] RawImage debugImg;
 
 
 	public static WxBulletManager instance {
@@ -69,22 +69,26 @@ public class WxBulletManager : MonoBehaviour {
 
 	private void InitAliveMap(ref Texture2D map) {
 
-		var mapSize = 30;
-		map = new Texture2D(mapSize, 1, TextureFormat.R8, false);
+		var mapSize = 10;
+		map = new Texture2D(mapSize, 1, TextureFormat.R8,false,true);
+		map.filterMode = FilterMode.Point;
+		map.wrapMode = TextureWrapMode.Clamp;
 
 		for (int i = 0; i < mapSize; ++i) {
 			SetBulletAliveToMap(i,false);
 		}
 
 		map.Apply();
+		projectileVfx.SetTexture(ShaderPropertyUtil.aliveMapAtt, aliveMap);
+		debugImg.texture = map;
 	}
 	private void UpdateAliveMapTexture() {
-		if (!mapIsDirty) return;
+		//if (!mapIsDirty) return;
 
 		//var startTime = Time.realtimeSinceStartup;
 
-		aliveMap.Apply();
-		projectileVfx.SetTexture(ShaderPropertyUtil.aliveMapAtt, aliveMap);
+		aliveMap.Apply(false, false);
+		//projectileVfx.SetTexture(ShaderPropertyUtil.aliveMapAtt, aliveMap);
 		mapIsDirty = false;
 
 		//var endTime = Time.realtimeSinceStartup;
@@ -93,8 +97,14 @@ public class WxBulletManager : MonoBehaviour {
 	}
 
 	void SetBulletAliveToMap(int id, bool alive) {
-		aliveMap.SetPixel(id, 0, alive ? aliveC : deadC);
+		var beforeC = aliveMap.GetPixel(id,0);
+		aliveMap.SetPixel(id, 0, alive ? aliveC.linear : deadC.linear);
+		var color = aliveMap.GetPixel(id,0);
+
+		if(!alive)
+		//WxLogger.Warning($"{id} before:{beforeC.r} | after: {color.r}");
 		mapIsDirty = true;
+		//aliveMap.Apply(false,false);
 	}
 
 
@@ -106,33 +116,30 @@ public class WxBulletManager : MonoBehaviour {
 
 		if(_bulletList == null || _bulletList.Count <= 0) return;
 
+		var dTime = Time.deltaTime;
+
 		foreach (var bullet in _bulletList ) {
-
-			var alive = bullet.Simulate();
-
-			if (!alive) {
-				SetBulletAliveToMap(bullet.id,alive);
-
-			}
+			var alive = bullet.Simulate(dTime);
+			SetBulletAliveToMap(bullet.id, alive);
 		}
 
 
 		//ReverseForLoop to Remove Bullets
-		for (int i = _bulletList.Count - 1; i >= 0 ; i--) {
-			if (!_bulletList[i].alive) {
-				_bulletList.RemoveAt(i);
-			}
-		}
+		//for (int i = _bulletList.Count - 1; i >= 0 ; i--) {
+		//	if (!_bulletList[i].alive) {
+		//		_bulletList.RemoveAt(i);
+		//	}
+		//}
 
 
 		//Predicate method
-		//_bulletList.RemoveAll(i => !i.alive);
+		_bulletList.RemoveAll(i => !i.alive);
 	}
 
 
 
 	private void LateUpdate() {
-		//UpdateAliveMapTexture();
+		UpdateAliveMapTexture();
 		DebugShowBulletCount(_bulletList.Count);
 	}
 
@@ -154,18 +161,18 @@ public class WxBulletManager : MonoBehaviour {
 		public float age = 0;
 		public bool alive = true;
 
-		public WxBullet(int id, in CreateDesc desc) {
-			this.id = id;
-			position = desc.startPos;
-			velocity = desc.velocity;
-			lifeTime = desc.etaTime;
+		public WxBullet(in CreateDesc desc) {
+			id			= desc.id;
+			position	= desc.startPos;
+			velocity	= desc.velocity;
+			lifeTime	= desc.etaTime;
 		}
 
-		public bool Simulate() {
+		public bool Simulate(float deltaTime) {
 			if(!alive) return false;
 
 			position += velocity * Time.deltaTime;
-			age += Time.deltaTime;
+			age += deltaTime;
 
 			if(age > lifeTime) {
 				alive = false;
@@ -175,6 +182,8 @@ public class WxBulletManager : MonoBehaviour {
 		}
 
 		public struct CreateDesc {
+
+			public int    id;
 			public Vector3 startPos;
 			public Vector3 targetPos;
 
@@ -183,7 +192,9 @@ public class WxBulletManager : MonoBehaviour {
 			public float distance;
 			public float etaTime;
 
-			public CreateDesc(in RaycastHit target, in Vector3 startPos, float speed) {
+			public CreateDesc(int id,in RaycastHit target, in Vector3 startPos, float speed) {
+
+				this.id = id;
 
 				this.startPos = startPos;
 				targetPos = target.point;
@@ -194,8 +205,8 @@ public class WxBulletManager : MonoBehaviour {
 				etaTime = distance / speed;
 			}
 
-			public CreateDesc(in Vector3 direction, in Vector3 startPos, float speed) {
-
+			public CreateDesc(int id,in Vector3 direction, in Vector3 startPos, float speed) {
+				this.id = id;
 				this.startPos = startPos;
 				targetPos = startPos + direction;
 
@@ -209,30 +220,30 @@ public class WxBulletManager : MonoBehaviour {
 	}
 
 	public static void SpawnBullet(in RaycastHit target, in Vector3 shootPos, float speed) {
-		var bulletDESC = new WxBullet.CreateDesc(in target,in shootPos,speed);
+		++_instance.bulletFiredCount;
+		var id = _instance.bulletFiredCount % (_instance.aliveMap.width);
+
+		var bulletDESC = new WxBullet.CreateDesc(id,in target,in shootPos,speed);
 		_instance.CreateBullet(in bulletDESC);
 		_instance.DrawVFXProjectile(in bulletDESC);
 	}
 
 	private void CreateBullet(in WxBullet.CreateDesc bulletDESC) {
-		var id = bulletFiredCount % (aliveMap.width);
-		var bullet = new WxBullet(id,in bulletDESC);
-
+		var bullet = new WxBullet(in bulletDESC);
 		_bulletList.Add(bullet);
-		SetBulletAliveToMap(id, true);
+		SetBulletAliveToMap(bulletDESC.id, true);
 	}
 
 	private void DrawVFXProjectile(in WxBullet.CreateDesc bulletDESC) {
-
 		var attribute	= projectileAttrbute;
 		var vfx			= projectileVfx;
-
-		++bulletFiredCount;
 
 		attribute.SetFloat(ShaderPropertyUtil.spawnCountAtt, 1f);
 		attribute.SetVector3(ShaderPropertyUtil.startPosAtt, bulletDESC.startPos);
 		attribute.SetVector3(ShaderPropertyUtil.velocityAtt, bulletDESC.velocity);
-		attribute.SetFloat(ShaderPropertyUtil.lifeTimeAtt, bulletDESC.etaTime);
+		//attribute.SetFloat(ShaderPropertyUtil.lifeTimeAtt, bulletDESC.etaTime);
+		attribute.SetFloat(ShaderPropertyUtil.lifeTimeAtt, 10f);
+		attribute.SetFloat(ShaderPropertyUtil.meshIdAtt, bulletDESC.id);
 		vfx.SendEvent(ShaderPropertyUtil.emitEvent, attribute);
 	}
 

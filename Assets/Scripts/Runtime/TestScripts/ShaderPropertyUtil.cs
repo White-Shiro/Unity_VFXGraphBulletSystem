@@ -10,4 +10,5 @@ public static class ShaderPropertyUtil {
 	public static readonly int targetNormalAtt = Shader.PropertyToID("targetNormal");
 	public static readonly int lifeTimeAtt = Shader.PropertyToID("lifetime");
 	public static readonly int aliveMapAtt = Shader.PropertyToID("aliveMap");
+	public static readonly int meshIdAtt = Shader.PropertyToID("meshIndex");
 }
