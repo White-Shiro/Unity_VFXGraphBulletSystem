@@ -110,6 +110,7 @@ public class WxBulletManager : MonoBehaviour {
 
 	void Update() {
 		Update_bullets();
+		MatrixDrawMeshInstance();
 	}
 
 	void Update_bullets() {
